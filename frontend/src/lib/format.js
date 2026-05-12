@@ -45,6 +45,10 @@ export function toDateTimeLocalInput(value) {
   return new Date(d.getTime() - tz).toISOString().slice(0, 16);
 }
 
+export function nowDateTimeLocalInput() {
+  return toDateTimeLocalInput(new Date());
+}
+
 export function toDateInput(value) {
   if (!value) return "";
   const d = new Date(value);

@@ -15,6 +15,7 @@ import {
   PhoneCall,
   StickyNote,
   Plus,
+  Package,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/lib/toast";
@@ -25,8 +26,8 @@ import {
   paymentStatusLabel,
   PAYMENT_STATUS_TONE,
   paymentMethodLabel,
-  PAYMENT_METHODS,
   toDateTimeLocalInput,
+  nowDateTimeLocalInput,
   billDisplayName,
   billDescription,
 } from "@/lib/format";
@@ -65,6 +66,7 @@ export default function BillDetailsPage({ params }) {
   const toast = useToast();
   const [bill, setBill] = useState(null);
   const [users, setUsers] = useState([]);
+  const [productTypes, setProductTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -73,6 +75,7 @@ export default function BillDetailsPage({ params }) {
     userId: "",
     customerName: "",
     amount: "",
+    productType: "",
     billPrice: "",
     billDate: "",
     dateOfCall: "",
@@ -85,9 +88,6 @@ export default function BillDetailsPage({ params }) {
 
   const [payment, setPayment] = useState({
     amount: "",
-    paidAt: "",
-    method: "cash",
-    note: "",
   });
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState("");
@@ -119,15 +119,34 @@ export default function BillDetailsPage({ params }) {
       .catch(() => setUsers([]));
   }, [editing, users.length]);
 
+  useEffect(() => {
+    if (!editing || productTypes.length > 0) return;
+    api
+      .get("/api/bills")
+      .then((data) => {
+        const types = Array.from(
+          new Set(
+            (Array.isArray(data) ? data : [])
+              .map((item) => String(item.productType || "").trim())
+              .filter(Boolean)
+          )
+        ).sort((a, b) => a.localeCompare(b));
+        setProductTypes(types);
+      })
+      .catch(() => setProductTypes([]));
+  }, [editing, productTypes.length]);
+
   const openEdit = () => {
     if (!bill) return;
     setEditForm({
       userId: (bill.userId && (bill.userId._id || bill.userId)) || "",
       customerName: billDisplayName(bill) || "",
       amount: bill.amount ?? "",
+      productType: bill.productType || "",
       billPrice: bill.totalAmount ?? bill.billPrice ?? "",
-      billDate: toDateTimeLocalInput(bill.billDate),
-      dateOfCall: toDateTimeLocalInput(bill.dateOfCall),
+      billDate: toDateTimeLocalInput(bill.billDate) || nowDateTimeLocalInput(),
+      dateOfCall:
+        toDateTimeLocalInput(bill.dateOfCall) || nowDateTimeLocalInput(),
       description: billDescription(bill) || "",
     });
     setEditing(true);
@@ -138,6 +157,7 @@ export default function BillDetailsPage({ params }) {
     try {
       const payload = {
         amount: Number(editForm.amount),
+        productType: editForm.productType,
         billPrice: Number(editForm.billPrice),
         description: editForm.description,
       };
@@ -189,15 +209,9 @@ export default function BillDetailsPage({ params }) {
     }
     setPaying(true);
     try {
-      const payload = {
-        amount,
-        method: payment.method,
-        note: payment.note || undefined,
-      };
-      if (payment.paidAt) payload.paidAt = payment.paidAt;
-      const updated = await api.post(`/api/bills/${id}/payments`, payload);
+      const updated = await api.post(`/api/bills/${id}/payments`, { amount });
       setBill(updated);
-      setPayment({ amount: "", paidAt: "", method: "cash", note: "" });
+      setPayment({ amount: "" });
       toast.success("تم تسجيل الدفعة");
     } catch (err) {
       setPayError(err.message || "تعذر تسجيل الدفعة");
@@ -248,11 +262,6 @@ export default function BillDetailsPage({ params }) {
     sublabel: `${u.email} • ${u.country}`,
     searchText: `${u.name} ${u.email} ${u.country}`,
   }));
-  const methodOptions = PAYMENT_METHODS.map((m) => ({
-    value: m.value,
-    label: m.label,
-  }));
-
   const total = bill.totalAmount ?? bill.billPrice ?? 0;
   const paid = bill.paidAmount ?? 0;
   const remaining = bill.remainingAmount ?? Math.max(total - paid, 0);
@@ -318,7 +327,12 @@ export default function BillDetailsPage({ params }) {
       <Card className="p-5 mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center gap-5">
           <div className="flex items-center gap-4 lg:w-1/3">
-            <Avatar name={clientName} className="w-14 h-14 text-base" />
+            <Avatar
+              src={clientUser?.image}
+              imageUrl={clientUser?.imageUrl}
+              name={clientName}
+              className="w-14 h-14 text-base"
+            />
             <div className="min-w-0">
               <p className="text-[11px] text-slate-500">العميل</p>
               {clientUser ? (
@@ -396,6 +410,15 @@ export default function BillDetailsPage({ params }) {
               </div>
             </div>
             <div className="flex items-start gap-2">
+              <Package size={16} className="text-slate-400 mt-0.5" />
+              <div>
+                <p className="text-[11px] text-slate-500">نوع المنتج</p>
+                <p className="font-bold text-slate-800">
+                  {bill.productType || "—"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
               <CalendarDays size={16} className="text-slate-400 mt-0.5" />
               <div>
                 <p className="text-[11px] text-slate-500">تاريخ الفاتورة</p>
@@ -445,52 +468,23 @@ export default function BillDetailsPage({ params }) {
                 </label>
                 <Input
                   type="number"
+                  min="0"
+                  max={remaining}
                   step="any"
                   value={payment.amount}
-                  onChange={(e) =>
-                    setPayment((p) => ({ ...p, amount: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    const numeric = Number(next);
+                    setPayError("");
+                    setPayment((p) => ({
+                      ...p,
+                      amount:
+                        Number.isFinite(numeric) && numeric > remaining
+                          ? String(remaining)
+                          : next,
+                    }));
+                  }}
                   placeholder={`حتى ${formatPrice(remaining)}`}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  تاريخ الدفع
-                </label>
-                <Input
-                  type="datetime-local"
-                  value={payment.paidAt}
-                  onChange={(e) =>
-                    setPayment((p) => ({ ...p, paidAt: e.target.value }))
-                  }
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  اتركه فارغًا للوقت الحالي
-                </p>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  طريقة الدفع
-                </label>
-                <SearchableSelect
-                  value={payment.method}
-                  onChange={(v) => setPayment((p) => ({ ...p, method: v }))}
-                  options={methodOptions}
-                  searchable={false}
-                  placeholder="اختر طريقة الدفع"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  ملاحظة (اختياري)
-                </label>
-                <Textarea
-                  value={payment.note}
-                  onChange={(e) =>
-                    setPayment((p) => ({ ...p, note: e.target.value }))
-                  }
-                  rows={2}
-                  placeholder="رقم إيصال، تفاصيل التحويل..."
                 />
               </div>
               {payError ? (
@@ -678,12 +672,32 @@ export default function BillDetailsPage({ params }) {
               </label>
               <Input
                 type="number"
+                min="1"
                 step="any"
                 value={editForm.amount}
                 onChange={(e) =>
                   setEditForm((f) => ({ ...f, amount: e.target.value }))
                 }
               />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">
+                نوع المنتج
+              </label>
+              <Input
+                list="edit-product-type-options"
+                value={editForm.productType}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, productType: e.target.value }))
+                }
+                placeholder="اكتب أو اختر نوع المنتج"
+                autoComplete="off"
+              />
+              <datalist id="edit-product-type-options">
+                {productTypes.map((type) => (
+                  <option key={type} value={type} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1">

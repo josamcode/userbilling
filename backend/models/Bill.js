@@ -29,6 +29,7 @@ const billSchema = new mongoose.Schema(
     customerName: { type: String, required: false, trim: true },
 
     amount: { type: Number, required: true, min: 0 },
+    productType: { type: String, required: false, trim: true, default: "" },
     billPrice: { type: Number, required: true, min: 0 },
     // billDate now stores date + time
     billDate: { type: Date, required: false },

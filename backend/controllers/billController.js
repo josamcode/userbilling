@@ -34,7 +34,11 @@ exports.getBills = async (req, res) => {
           b.customerNameSnapshot ||
           b.customerName ||
           "";
-        return name.toLowerCase().includes(s);
+        const productType = b.productType || "";
+        return (
+          name.toLowerCase().includes(s) ||
+          productType.toLowerCase().includes(s)
+        );
       });
     }
 
@@ -72,7 +76,9 @@ exports.createBill = async (req, res) => {
       userId,
       customerName,
       amount,
+      productType,
       billPrice,
+      paidAmount,
       description,
     } = req.body || {};
 
@@ -83,10 +89,19 @@ exports.createBill = async (req, res) => {
 
     const amountNum = Number(amount);
     const priceNum = Number(billPrice);
+    const paidNum =
+      paidAmount === undefined || paidAmount === null || paidAmount === ""
+        ? 0
+        : Number(paidAmount);
     if (!Number.isFinite(amountNum) || amountNum <= 0)
       return badRequest(res, "الكمية يجب أن تكون رقم موجب");
     if (!Number.isFinite(priceNum) || priceNum <= 0)
       return badRequest(res, "السعر يجب أن يكون رقم موجب");
+
+    if (!Number.isFinite(paidNum) || paidNum < 0)
+      return badRequest(res, "Invalid paid amount");
+    if (paidNum > priceNum + 0.001)
+      return badRequest(res, "Paid amount cannot exceed the receipt total");
 
     let resolvedUserId;
     let snapshotName = "";
@@ -109,12 +124,13 @@ exports.createBill = async (req, res) => {
       customerNameSnapshot: snapshotName,
       customerName: snapshotName,
       amount: amountNum,
+      productType: productType ? String(productType).trim() : "",
       billPrice: priceNum,
       billDate,
       dateOfCall,
-      state: "pending", // new bills always start unpaid; payments drive status
+      state: paidNum >= priceNum ? "paid" : "pending",
       description: description ? String(description).trim() : "",
-      payments: [],
+      payments: paidNum > 0 ? [{ amount: paidNum }] : [],
     });
     const populated = await bill.populate(
       "userId",
@@ -140,6 +156,9 @@ exports.updateBill = async (req, res) => {
       if (!Number.isFinite(n) || n <= 0)
         return badRequest(res, "الكمية يجب أن تكون رقم موجب");
       update.amount = n;
+    }
+    if (req.body.productType !== undefined) {
+      update.productType = String(req.body.productType || "").trim();
     }
     if (req.body.billPrice !== undefined) {
       const n = Number(req.body.billPrice);

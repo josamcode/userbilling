@@ -71,7 +71,8 @@ export default function BillsPage() {
         return false;
       if (!q) return true;
       const name = billDisplayName(b).toLowerCase();
-      return name.includes(q);
+      const productType = String(b.productType || "").toLowerCase();
+      return name.includes(q) || productType.includes(q);
     });
   }, [bills, search, statusFilter]);
 
@@ -210,6 +211,10 @@ export default function BillsPage() {
                 <tbody>
                   {filtered.map((bill) => {
                     const name = billDisplayName(bill) || "—";
+                    const client =
+                      bill.userId && typeof bill.userId === "object"
+                        ? bill.userId
+                        : null;
                     return (
                       <tr
                         key={bill._id}
@@ -220,9 +225,21 @@ export default function BillsPage() {
                             href={`/bills/${bill._id}`}
                             className="flex items-center gap-3 min-w-0"
                           >
-                            <Avatar name={name} className="w-9 h-9 text-xs" />
-                            <span className="font-semibold text-slate-800 truncate hover:text-indigo-700">
-                              {name}
+                            <Avatar
+                              src={client?.image}
+                              imageUrl={client?.imageUrl}
+                              name={name}
+                              className="w-9 h-9 text-xs"
+                            />
+                            <span className="min-w-0">
+                              <span className="block font-semibold text-slate-800 truncate hover:text-indigo-700">
+                                {name}
+                              </span>
+                              {bill.productType ? (
+                                <span className="block text-[11px] text-slate-500 truncate">
+                                  {bill.productType}
+                                </span>
+                              ) : null}
                             </span>
                           </Link>
                         </td>
@@ -280,6 +297,10 @@ export default function BillsPage() {
           <div className="md:hidden space-y-3">
             {filtered.map((bill) => {
               const name = billDisplayName(bill) || "—";
+              const client =
+                bill.userId && typeof bill.userId === "object"
+                  ? bill.userId
+                  : null;
               return (
                 <div key={bill._id} className="surface p-4">
                   <Link
@@ -287,11 +308,21 @@ export default function BillsPage() {
                     className="flex items-start justify-between gap-3"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <Avatar name={name} className="w-10 h-10 text-sm" />
+                      <Avatar
+                        src={client?.image}
+                        imageUrl={client?.imageUrl}
+                        name={name}
+                        className="w-10 h-10 text-sm"
+                      />
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 truncate">
                           {name}
                         </p>
+                        {bill.productType ? (
+                          <p className="text-[11px] text-slate-500 truncate">
+                            {bill.productType}
+                          </p>
+                        ) : null}
                         <p className="text-xs text-slate-500 mt-0.5 tabular">
                           {formatDateTime(bill.billDate)}
                         </p>
